@@ -1,5 +1,8 @@
 mod cpu_memory;
 mod mos6502;
+mod rom;
+use rom::ROM;
+
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Canvas, Color, DrawParam};
 use ggez::input::keyboard;
