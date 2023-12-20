@@ -10,8 +10,6 @@ pub struct CartridgeData {
     trainer: Option<[u8; 512]>,
     prg_rom: Vec<u8>, // 16384 * x bytes
     chr_rom: Vec<u8>, // 8192 * y bytes
-    inst_rom: Option<[u8; 8192]>,
-    prom: Option<[u8; 16]>, // often missing
 
     vertical_mirroring: bool, // true if vertical, false if horizontal
     four_screen_vram: bool,   // if true, ignore vertical_mirroring
@@ -68,8 +66,6 @@ impl CartridgeData {
             trainer,
             prg_rom,
             chr_rom,
-            inst_rom,
-            prom,
             vertical_mirroring,
             four_screen_vram,
         })
