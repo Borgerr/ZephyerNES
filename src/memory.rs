@@ -32,13 +32,10 @@ impl CartridgeData {
             }
         }
 
-        let prg_rom_size = header[4];
-        let prg_rom = Vec::with_capacity(prg_rom_size as usize);
+        let mut prg_rom_size = header[4] as usize;
+        let mut chr_rom_size = header[5] as usize;
 
-        let chr_rom_size = header[5];
-        let chr_rom = Vec::with_capacity(chr_rom_size as usize);
-
-        let mut trainer = None;
+        let mut trainer: Option<[u8; 512]> = None;
 
         // Flags 6
         let vertical_mirroring = (header[6] & 0b1) == 1;
@@ -48,17 +45,33 @@ impl CartridgeData {
         }
         if (header[6] & 0b001) >> 2 == 1 {
             // 512-byte trainer at $7000~$71FF
-            let trainer_arr = &filebytes[16..16 + 512].try_into();
-            trainer = Some(trainer_arr);
+            match &filebytes[16..16 + 512].try_into() {
+                Ok(trainer_arr) => trainer = Some(*trainer_arr),
+                Err(_) => return Err(RomReadError::InvalidHeader { index: 6 }),
+            }
         }
-        if (header[6] & 0b0001) >> 3 == 1 {
-            // Ignore mirroring control or mirroring bit;
-            // instead provide four-screen VRAM
+        let four_screen_vram = (header[6] & 0b0001) >> 3 == 1;
+
+        // Flags 7
+        if (header[7] & 0b1100) >> 2 == 2 {
+            // flags 8-15 are in NES 2.0 format
+        } else {
+            // flags 8-15 are in INES format
+
+            // Flags 9 and 10 left unused by emulator
+            // and rest of header bytes are irrelevant
         }
+        let chr_rom = Vec::with_capacity(chr_rom_size);
+        let prg_rom = Vec::with_capacity(prg_rom_size);
 
-        // Flags 8
-
-        // Flags 7, 9 and 10 left unused by emulator
-        // and rest of header bytes are irrelevant
+        Ok(CartridgeData {
+            trainer,
+            prg_rom,
+            chr_rom,
+            inst_rom,
+            prom,
+            vertical_mirroring,
+            four_screen_vram,
+        })
     }
 }
