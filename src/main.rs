@@ -1,7 +1,7 @@
 mod cpu_memory;
+mod memory;
 mod mos6502;
-mod rom;
-use rom::ROM;
+use memory::CartridgeData;
 
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Canvas, Color, DrawParam};
