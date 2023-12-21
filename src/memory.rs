@@ -11,6 +11,8 @@ pub struct CartridgeData {
     prg_rom: Vec<u8>, // 16384 * x bytes
     chr_rom: Vec<u8>, // 8192 * y bytes
 
+    mapper_number: u16,
+
     vertical_mirroring: bool, // true if vertical, false if horizontal
     four_screen_vram: bool,   // if true, ignore vertical_mirroring
 }
@@ -50,15 +52,47 @@ impl CartridgeData {
         }
         let four_screen_vram = (header[6] & 0b0001) >> 3 == 1;
 
+        // mapper number kind of between flags 6 and 7
+        // if NES 2.0, this only captures D0..D7
+        let mut mapper_number = (header[7] as u16 & 0xf0) | ((header[6] as u16 & 0xf0) >> 4);
+
         // Flags 7
-        if (header[7] & 0b1100) >> 2 == 2 {
+        if (header[7] & 0b1100) >> 2 == 0b10 {
             // flags 8-15 are in NES 2.0 format
+
+            // Flags 8
+            mapper_number |= (header[8] as u16 & 0xf) << 8;
+            // submapper is the upper nibble here,
+            // need to determine if this is necessary
+
+            // Flags 9
+            prg_rom_size |= (header[9] as usize & 0xf) << 8;
+            chr_rom_size |= (header[9] as usize & 0xf0) << 4;
+
+            // Flags 10...
         } else {
             // flags 8-15 are in INES format
 
             // Flags 9 and 10 left unused by emulator
             // and rest of header bytes are irrelevant
         }
+
+        // determine if exponent multiplier notation is used for PRG/CHR-ROM
+        if chr_rom_size >> 8 == 0xf {
+            let multiplier = chr_rom_size & 0b11;
+            let exponent = (chr_rom_size & 0x0ff) >> 2;
+
+            // actual CHR-ROM size is 2^E * (MM*2+1)
+            chr_rom_size = (0b1 << exponent) * (multiplier * 2 + 1);
+        }
+        if prg_rom_size >> 8 == 0xf {
+            let multiplier = prg_rom_size & 0b11;
+            let exponent = (prg_rom_size & 0x0ff) >> 2;
+
+            // actual PRG-ROM size is 2^E * (MM*2+1)
+            prg_rom_size = (0b1 << exponent) * (multiplier * 2 + 1);
+        }
+
         let chr_rom = Vec::with_capacity(chr_rom_size);
         let prg_rom = Vec::with_capacity(prg_rom_size);
 
@@ -66,6 +100,7 @@ impl CartridgeData {
             trainer,
             prg_rom,
             chr_rom,
+            mapper_number,
             vertical_mirroring,
             four_screen_vram,
         })
