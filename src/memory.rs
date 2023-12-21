@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub enum RomReadError {
     TooShort,
     InvalidHeader { index: usize },
@@ -39,15 +40,13 @@ impl CartridgeData {
 
         // Flags 6
         let vertical_mirroring = (header[6] & 0b1) == 1;
-        if (header[6] & 0b01) >> 1 == 1 {
-            // cartridge contains battery-backed PRG RAM ($6000~7FFF)
-            // or other persistent memory
-        }
-        if (header[6] & 0b001) >> 2 == 1 {
+        let prg_ram_present = (header[6] & 0b10) >> 1 == 1;
+        if (header[6] & 0b100) >> 2 == 1 {
             // 512-byte trainer at $7000~$71FF
-            match &filebytes[16..16 + 512].try_into() {
-                Ok(trainer_arr) => trainer = Some(*trainer_arr),
-                Err(_) => return Err(RomReadError::InvalidHeader { index: 6 }),
+            if filebytes.len() >= 16 + 512 {
+                trainer = Some(filebytes[16..16 + 512].try_into().unwrap());
+            } else {
+                return Err(RomReadError::InvalidHeader { index: 6 });
             }
         }
         let four_screen_vram = (header[6] & 0b0001) >> 3 == 1;
@@ -57,13 +56,16 @@ impl CartridgeData {
         let mut mapper_number = (header[7] as u16 & 0xf0) | ((header[6] as u16 & 0xf0) >> 4);
 
         // Flags 7
-        if (header[7] & 0b1100) >> 2 == 0b10 {
+        if ((header[7] & 0b1100) >> 2) == 0b10 {
             // flags 8-15 are in NES 2.0 format
 
             // Flags 8
-            mapper_number |= (header[8] as u16 & 0xf) << 8;
-            // submapper is the upper nibble here,
-            // need to determine if this is necessary
+            mapper_number |= ((header[8] as u16) & 0xf) << 8;
+            // submapper is the upper nibble here
+            // need to decide what to do with it
+            match header[8] & 0xf0 >> 4 {
+                _ => {}
+            }
 
             // Flags 9
             prg_rom_size |= (header[9] as usize & 0xf) << 8;
@@ -104,5 +106,88 @@ impl CartridgeData {
             vertical_mirroring,
             four_screen_vram,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::matches;
+
+    use crate::memory::CartridgeData;
+
+    fn valid_header_no_data(size: usize) -> Vec<u8> {
+        let mut rom = vec![0; 16 + size];
+        // let valid_first_four = [0x4e, 0x45, 0x53, 0x1a];
+        rom[0] = 0x4e;
+        rom[1] = 0x45;
+        rom[2] = 0x53;
+        rom[3] = 0x1a;
+
+        rom
+    }
+
+    #[test]
+    fn returns_valid_with_blank_header() {
+        let rom = valid_header_no_data(0);
+
+        assert!(matches!(CartridgeData::new(rom), Result::Ok(..)));
+    }
+
+    #[test]
+    fn returns_invalid_no_data() {
+        assert!(matches!(CartridgeData::new(Vec::new()), Result::Err(..)));
+    }
+
+    #[test]
+    fn returns_valid_with_no_trainer() {
+        let rom = valid_header_no_data(0);
+        let data = CartridgeData::new(rom).unwrap();
+
+        assert!(matches!(data.trainer, Option::None));
+    }
+
+    #[test]
+    fn returns_valid_with_trainerflag_and_data() {
+        let mut rom = valid_header_no_data(512);
+        rom[6] = 0b100;
+
+        let data = CartridgeData::new(rom).unwrap();
+
+        assert!(matches!(data.trainer, Option::Some(..)));
+    }
+
+    #[test]
+    fn returns_invalid_with_trainerflag_and_no_data() {
+        let mut rom = valid_header_no_data(0);
+        rom[6] = 0b100;
+
+        assert!(matches!(CartridgeData::new(rom), Result::Err(..)));
+    }
+
+    #[test]
+    fn arbitrary_mapper_number_ines() {
+        let mapper_num = 0x3e;
+
+        let mut rom = valid_header_no_data(0);
+        rom[6] = 0xe0;
+        rom[7] = 0x30; // INES header format
+
+        let data = CartridgeData::new(rom).unwrap();
+
+        assert_eq!(mapper_num, data.mapper_number);
+    }
+
+    #[test]
+    fn arbitrary_mapper_number_nes2() {
+        let mapper_num = 0xa3e;
+
+        let mut rom = valid_header_no_data(0);
+        rom[6] = 0xe0;
+        rom[7] = 0x30 | 0b1000; // NES 2.0 header format
+        rom[8] = 0xa;
+
+        let data = CartridgeData::new(rom).unwrap();
+
+        assert_eq!(mapper_num, data.mapper_number);
     }
 }
