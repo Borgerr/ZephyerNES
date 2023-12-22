@@ -25,7 +25,7 @@ impl CartridgeData {
         }
         let header = &filebytes[0..16];
 
-        // ensure header bytes are valid
+        // ensure header bytes are valid, header bytes 0-3
         let valid_first_four = [0x4e, 0x45, 0x53, 0x1a];
         for index in 0..4 {
             if header[index] != valid_first_four[index] {
@@ -33,12 +33,14 @@ impl CartridgeData {
             }
         }
 
-        let mut prg_rom_size = header[4] as usize;
-        let mut chr_rom_size = header[5] as usize;
+        let mut prg_rom_size = header[4] as usize; // PRG-ROM size LSB, byte 4
+        let mut chr_rom_size = header[5] as usize; // CHR-ROM size LSB, byte 5
 
         let mut trainer: Option<[u8; 512]> = None;
 
-        // Flags 6
+        // Flags 6, mirroring type, battery & non-volatile memory presence,
+        // trainer presence, four-screen mode.
+        // TODO: need to add handling for battery flags
         let vertical_mirroring = (header[6] & 0b1) == 1;
         let prg_ram_present = (header[6] & 0b10) >> 1 == 1;
         if (header[6] & 0b100) >> 2 == 1 {
@@ -52,26 +54,45 @@ impl CartridgeData {
         let four_screen_vram = (header[6] & 0b1000) >> 3 == 1;
 
         // mapper number kind of between flags 6 and 7
-        // if NES 2.0, this only captures D0..D7
+        // if NES 2.0, this only captures D0..D7, thus we make this mutable
         let mut mapper_number = (header[7] as u16 & 0xf0) | ((header[6] as u16 & 0xf0) >> 4);
 
-        // Flags 7
+        // Flags 7, determine console type (unused) and NES 2.0 identifier
         if ((header[7] & 0b1100) >> 2) == 0b10 {
             // flags 8-15 are in NES 2.0 format
 
-            // Flags 8
+            // Flags 8, mapper MSB and submapper
             mapper_number |= ((header[8] as u16) & 0xf) << 8;
             // submapper is the upper nibble here
-            // need to decide what to do with it
+            // TODO: decide what to do with submapper
             match header[8] & 0xf0 >> 4 {
                 _ => {}
             }
 
-            // Flags 9
+            // Flags 9, PRG-ROM, CHR-ROM size MSBs
             prg_rom_size |= (header[9] as usize & 0xf) << 8;
             chr_rom_size |= (header[9] as usize & 0xf0) << 4;
 
-            // Flags 10...
+            // Flags 10, PRG-RAM & PRG-NVRAM size
+            let prg_shift_volatile = header[10] & 0xf;
+            let prg_shift_non_volatile = (header[10] & 0xf0) >> 4;
+            // TODO: add in PRG-RAM and its correct size
+
+            // Flags 11, CHR-RAM & CHR-NVRAM size
+            let chr_shift_volatile = header[11] & 0xf;
+            let chr_shift_non_volatile = (header[11] & 0xf0) >> 4;
+            // TODO: add in CHR-RAM and its correct size
+
+            // Flags 12, CPU/PPU Timing
+            match header[12] & 0b11 {
+                0 => { /*  NTSC */ }
+                1 => { /* Licensed PAL NES */ }
+                2 => { /* Multiple-region */ }
+                3 => { /* UA6538 ("Dendy") */ }
+                _ => { /* probably some sort of error */ }
+            }
+
+            // Flags 13...
         } else {
             // flags 8-15 are in INES format
 
