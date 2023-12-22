@@ -49,7 +49,7 @@ impl CartridgeData {
                 return Err(RomReadError::InvalidHeader { index: 6 });
             }
         }
-        let four_screen_vram = (header[6] & 0b0001) >> 3 == 1;
+        let four_screen_vram = (header[6] & 0b1000) >> 3 == 1;
 
         // mapper number kind of between flags 6 and 7
         // if NES 2.0, this only captures D0..D7
@@ -189,5 +189,45 @@ mod tests {
         let data = CartridgeData::new(rom).unwrap();
 
         assert_eq!(mapper_num, data.mapper_number);
+    }
+
+    #[test]
+    fn vertical_mirroring() {
+        let mut rom = valid_header_no_data(0);
+        rom[6] = 0b1;
+
+        let data = CartridgeData::new(rom).unwrap();
+
+        assert!(data.vertical_mirroring);
+    }
+
+    #[test]
+    fn horizontal_mirroring() {
+        let rom = valid_header_no_data(0);
+        // rom[6] = 0;
+
+        let data = CartridgeData::new(rom).unwrap();
+
+        assert!(!data.vertical_mirroring);
+    }
+
+    #[test]
+    fn four_screen_on() {
+        let mut rom = valid_header_no_data(0);
+        rom[6] = 0b1000;
+
+        let data = CartridgeData::new(rom).unwrap();
+
+        assert!(data.four_screen_vram);
+    }
+
+    #[test]
+    fn four_screen_off() {
+        let rom = valid_header_no_data(0);
+        // rom[6] = 0;
+
+        let data = CartridgeData::new(rom).unwrap();
+
+        assert!(!data.four_screen_vram);
     }
 }
